@@ -39,6 +39,7 @@ def run_backtest(
     dates = prices.index
 
     _ensure_weights_columns(weights, assets)
+    weights = weights.reindex(prices.index)
 
     cash = initial_capital
     units = {asset: 0.0 for asset in assets}
@@ -66,50 +67,70 @@ def run_backtest(
 
         if should_rebalance:
             target_weights = target_row.fillna(0.0)
-            cash_weight = 1.0 - float(target_weights.sum())
 
             period_costs = 0.0
             period_taxes = 0.0
             period_trades = 0
 
+            trade_values: dict[str, float] = {}
             for asset in assets:
                 target_value = portfolio_value * float(target_weights[asset])
                 current_value = units[asset] * price_row[asset]
                 trade_value = target_value - current_value
+                if abs(trade_value) >= config.trade_tolerance:
+                    trade_values[asset] = trade_value
 
-                if abs(trade_value) < config.trade_tolerance:
+            for asset, trade_value in trade_values.items():
+                if trade_value >= 0:
                     continue
 
                 price = float(price_row[asset])
                 trade_units = trade_value / price
+                cash_delta, tax, cost, gain, sold = _sell_asset(
+                    units_sold=-trade_units,
+                    price=price,
+                    avg_cost=avg_cost[asset],
+                    config=config,
+                )
+                units[asset] -= sold
+                if units[asset] <= config.trade_tolerance:
+                    units[asset] = 0.0
+                    avg_cost[asset] = 0.0
 
-                if trade_units < 0:
-                    cash_delta, tax, cost, gain, sold = _sell_asset(
-                        units_sold=-trade_units,
-                        price=price,
-                        avg_cost=avg_cost[asset],
-                        config=config,
+                cash += cash_delta
+                period_taxes += tax
+                period_costs += cost
+                period_trades += 1
+
+                trade_rows.append(
+                    _trade_record(
+                        date, asset, "sell", sold, price, sold * price, tax, cost, gain
                     )
-                    units[asset] -= sold
-                    if units[asset] <= config.trade_tolerance:
-                        units[asset] = 0.0
-                        avg_cost[asset] = 0.0
+                )
 
-                    cash += cash_delta
-                    period_taxes += tax
-                    period_costs += cost
-                    period_trades += 1
-
-                    trade_rows.append(
-                        _trade_record(
-                            date, asset, "sell", sold, price, sold * price, tax, cost, gain
-                        )
-                    )
+            buy_values = {a: v for a, v in trade_values.items() if v > 0}
+            if buy_values:
+                cost_pct = (
+                    config.transaction_cost_pct
+                    if config.apply_transaction_costs
+                    else 0.0
+                )
+                total_buy_need = sum(v * (1.0 + cost_pct) for v in buy_values.values())
+                available_cash = max(cash, 0.0)
+                if total_buy_need > config.trade_tolerance:
+                    scale = min(1.0, available_cash / total_buy_need)
                 else:
+                    scale = 0.0
+
+                for asset, trade_value in buy_values.items():
+                    scaled_value = trade_value * scale
+                    if scaled_value < config.trade_tolerance:
+                        continue
+
+                    price = float(price_row[asset])
+                    trade_units = scaled_value / price
                     buy_value = trade_units * price
-                    cost = 0.0
-                    if config.apply_transaction_costs:
-                        cost = buy_value * config.transaction_cost_pct
+                    cost = buy_value * cost_pct
 
                     new_units = units[asset] + trade_units
                     if new_units > config.trade_tolerance:
@@ -134,11 +155,6 @@ def run_backtest(
                             0.0,
                         )
                     )
-
-            target_cash = portfolio_value * cash_weight
-            cash_delta = target_cash - cash
-            if abs(cash_delta) > config.trade_tolerance:
-                cash = target_cash
 
             total_taxes += period_taxes
             total_costs += period_costs

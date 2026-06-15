@@ -104,8 +104,9 @@ def win_rate(returns: pd.Series) -> float:
 def calendar_year_returns(result: BacktestResult) -> pd.Series:
     """Compound return for each calendar year."""
     equity = result.equity
-    yearly = equity.groupby(equity.index.year).agg(["first", "last"])
-    returns = yearly["last"] / yearly["first"] - 1.0
+    year_end_equity = equity.groupby(equity.index.year).last()
+    returns = year_end_equity.pct_change()
+    returns.iloc[0] = year_end_equity.iloc[0] / equity.iloc[0] - 1.0
     returns.index.name = "year"
     return returns
 

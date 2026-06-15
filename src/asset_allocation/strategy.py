@@ -77,7 +77,7 @@ def momentum_weights(
     allocation: str = "winner",
     threshold: float = 0.0,
     absolute: bool = False,
-    skip: int = 0,
+    skip: int = 1,
     rebalance: str = "M",
     risk_free_rate: float = 0.0,
 ) -> pd.DataFrame:
@@ -105,7 +105,8 @@ def momentum_weights(
     absolute
         If True, move to cash when the relevant momentum score(s) are <= 0.
     skip
-        Months skipped at the recent end of the return window (e.g. 1 for 12-1).
+        Months skipped at the recent end of the return window (default 1 for 12-1
+        momentum; avoids look-ahead when trading at month-end).
     rebalance
         Rebalance cadence (pandas offset alias, e.g. ``"M"``, ``"Q"``, ``"Y"``).
     risk_free_rate
