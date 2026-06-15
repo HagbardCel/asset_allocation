@@ -128,3 +128,36 @@ def test_relative_momentum_rebalances_on_weight_distance() -> None:
     assert first["a"] == pytest.approx(0.9, abs=0.05)
     assert last["a"] == pytest.approx(0.55, abs=0.05)
     assert first["a"] != pytest.approx(last["a"], abs=0.05)
+
+
+def test_absolute_winner_momentum_reenters_from_cash() -> None:
+    prices = pd.DataFrame(
+        {
+            "asset_a": [
+                100, 90, 80, 70, 60, 50,
+                55, 60, 65, 70, 75, 80,
+                85, 90, 95, 100,
+            ],
+            "asset_b": [
+                100, 99, 98, 97, 96, 95,
+                94, 93, 92, 91, 90, 89,
+                88, 87, 86, 85,
+            ],
+        },
+        index=pd.date_range("2020-01-31", periods=16, freq="ME"),
+        dtype=float,
+    )
+
+    weights = momentum_weights(
+        prices,
+        lookbacks=(3,),
+        allocation="winner",
+        absolute=True,
+        threshold=0.0,
+        skip=1,
+        rebalance="M",
+    )
+
+    defined = weights.dropna(how="all")
+    assert not defined.empty
+    assert defined.sum(axis=1).max() == pytest.approx(1.0)

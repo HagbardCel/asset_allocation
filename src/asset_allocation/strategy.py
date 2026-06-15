@@ -171,6 +171,13 @@ def momentum_weights(
                 held_asset = None
             continue
 
+        if held_asset is None:
+            weight_rows.append(desired.to_dict())
+            row_dates.append(date)
+            current_target = desired
+            held_asset = desired_top
+            continue
+
         if allocation == "relative":
             weight_distance = float((desired - current_target).abs().sum())
             if weight_distance > threshold:
