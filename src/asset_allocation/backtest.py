@@ -29,7 +29,11 @@ def run_backtest(
     config: BacktestConfig | None = None,
     initial_capital: float = 10_000.0,
 ) -> BacktestResult:
-    """Simulate a strategy given prices and target weights."""
+    """Simulate a strategy given prices and target weights.
+
+    When ``liquidate_at_end`` is enabled (default), all assets are sold on the
+    final evaluation date so exit taxes and transaction costs are included.
+    """
     config = config or BacktestConfig()
     assets = list(prices.columns)
     dates = prices.index
@@ -80,39 +84,26 @@ def run_backtest(
                 trade_units = trade_value / price
 
                 if trade_units < 0:
-                    units_sold = -trade_units
-                    proceeds = units_sold * price
-                    gain = (price - avg_cost[asset]) * units_sold
-                    tax = 0.0
-                    if config.apply_taxes and gain > 0:
-                        tax = gain * config.effective_tax_rate
-
-                    cost = 0.0
-                    if config.apply_transaction_costs:
-                        cost = abs(trade_value) * config.transaction_cost_pct
-
-                    units[asset] -= units_sold
+                    cash_delta, tax, cost, gain, sold = _sell_asset(
+                        units_sold=-trade_units,
+                        price=price,
+                        avg_cost=avg_cost[asset],
+                        config=config,
+                    )
+                    units[asset] -= sold
                     if units[asset] <= config.trade_tolerance:
                         units[asset] = 0.0
                         avg_cost[asset] = 0.0
 
-                    cash += proceeds - tax - cost
+                    cash += cash_delta
                     period_taxes += tax
                     period_costs += cost
                     period_trades += 1
 
                     trade_rows.append(
-                        {
-                            "date": date,
-                            "asset": asset,
-                            "side": "sell",
-                            "units": units_sold,
-                            "price": price,
-                            "value": proceeds,
-                            "tax": tax,
-                            "cost": cost,
-                            "realized_gain": max(gain, 0.0),
-                        }
+                        _trade_record(
+                            date, asset, "sell", sold, price, sold * price, tax, cost, gain
+                        )
                     )
                 else:
                     buy_value = trade_units * price
@@ -131,17 +122,17 @@ def run_backtest(
                     period_trades += 1
 
                     trade_rows.append(
-                        {
-                            "date": date,
-                            "asset": asset,
-                            "side": "buy",
-                            "units": trade_units,
-                            "price": price,
-                            "value": buy_value,
-                            "tax": 0.0,
-                            "cost": cost,
-                            "realized_gain": 0.0,
-                        }
+                        _trade_record(
+                            date,
+                            asset,
+                            "buy",
+                            trade_units,
+                            price,
+                            buy_value,
+                            0.0,
+                            cost,
+                            0.0,
+                        )
                     )
 
             target_cash = portfolio_value * cash_weight
@@ -166,6 +157,55 @@ def run_backtest(
             weight_row["cash"] = 0.0
         held_weight_rows.append(weight_row)
 
+    if config.liquidate_at_end:
+        final_date = dates[-1]
+        price_row = prices.loc[final_date]
+        period_taxes = 0.0
+        period_costs = 0.0
+        period_trades = 0
+
+        for asset in assets:
+            if units[asset] <= config.trade_tolerance:
+                continue
+
+            price = float(price_row[asset])
+            units_sold = units[asset]
+            cash_delta, tax, cost, gain, sold = _sell_asset(
+                units_sold=units_sold,
+                price=price,
+                avg_cost=avg_cost[asset],
+                config=config,
+            )
+            units[asset] = 0.0
+            avg_cost[asset] = 0.0
+            cash += cash_delta
+            period_taxes += tax
+            period_costs += cost
+            period_trades += 1
+
+            trade_rows.append(
+                _trade_record(
+                    final_date,
+                    asset,
+                    "sell",
+                    sold,
+                    price,
+                    sold * price,
+                    tax,
+                    cost,
+                    gain,
+                    liquidation=True,
+                )
+            )
+
+        total_taxes += period_taxes
+        total_costs += period_costs
+        num_trades += period_trades
+
+        equity_values[-1] = cash
+        held_weight_rows[-1] = {a: 0.0 for a in assets}
+        held_weight_rows[-1]["cash"] = 1.0 if cash > 0 else 0.0
+
     equity = pd.Series(equity_values, index=dates, name="equity")
     returns = equity.pct_change().dropna()
     held_weights = pd.DataFrame(held_weight_rows, index=dates)
@@ -181,6 +221,52 @@ def run_backtest(
         num_trades=num_trades,
         config=config,
     )
+
+
+def _sell_asset(
+    *,
+    units_sold: float,
+    price: float,
+    avg_cost: float,
+    config: BacktestConfig,
+) -> tuple[float, float, float, float, float]:
+    proceeds = units_sold * price
+    gain = (price - avg_cost) * units_sold
+    tax = gain * config.effective_tax_rate if config.apply_taxes and gain > 0 else 0.0
+    cost = (
+        proceeds * config.transaction_cost_pct
+        if config.apply_transaction_costs
+        else 0.0
+    )
+    cash_delta = proceeds - tax - cost
+    return cash_delta, tax, cost, max(gain, 0.0), units_sold
+
+
+def _trade_record(
+    date: pd.Timestamp,
+    asset: str,
+    side: str,
+    units: float,
+    price: float,
+    value: float,
+    tax: float,
+    cost: float,
+    realized_gain: float,
+    *,
+    liquidation: bool = False,
+) -> dict:
+    return {
+        "date": date,
+        "asset": asset,
+        "side": side,
+        "units": units,
+        "price": price,
+        "value": value,
+        "tax": tax,
+        "cost": cost,
+        "realized_gain": realized_gain,
+        "liquidation": liquidation,
+    }
 
 
 def _ensure_weights_columns(weights: pd.DataFrame, assets: list[str]) -> None:

@@ -59,6 +59,8 @@ Helpers:
 
 Toggle with `apply_taxes=False` or `apply_transaction_costs=False`.
 
+By default, all holdings are liquidated on the final evaluation date so exit taxes and costs are included in the reported return (`liquidate_at_end=True`).
+
 ### Metrics
 
 CAGR, annual volatility, Sharpe, Sortino, Calmar, max drawdown, longest drawdown, win rate, best/worst month, calendar-year returns, annual turnover, time in market, number of trades, total taxes and costs.

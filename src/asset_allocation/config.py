@@ -24,6 +24,9 @@ class BacktestConfig:
     # Minimum relative change in units to count as a trade
     trade_tolerance: float = 1e-9
 
+    # Sell all holdings on the final date (taxes/costs on exit included in results)
+    liquidate_at_end: bool = True
+
     @property
     def effective_tax_rate(self) -> float:
         """Tax rate after Teilfreistellung on equity ETF gains."""
