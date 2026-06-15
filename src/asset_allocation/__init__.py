@@ -11,10 +11,13 @@ from asset_allocation.strategy import (
     momentum_weights,
     periodic_weights,
 )
+from asset_allocation.walkforward import WalkForwardFold, WalkForwardResult, walk_forward
 
 __all__ = [
     "BacktestConfig",
     "BacktestResult",
+    "WalkForwardFold",
+    "WalkForwardResult",
     "align_weights",
     "buy_and_hold_weights",
     "constant_weights",
@@ -24,4 +27,5 @@ __all__ = [
     "periodic_weights",
     "run_backtest",
     "summary",
+    "walk_forward",
 ]

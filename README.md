@@ -85,6 +85,31 @@ Toggle with `apply_taxes=False` or `apply_transaction_costs=False`.
 
 By default, all holdings are liquidated on the final evaluation date so exit taxes and costs are included in the reported return (`liquidate_at_end=True`).
 
+### Walk-forward evaluation
+
+Anchored walk-forward selects the best momentum hyperparameters on an expanding training window and stitches out-of-sample segments into one continuous backtest:
+
+```python
+from asset_allocation.walkforward import walk_forward
+
+PARAM_GRID = {
+    "mom 12m winner": {"lookbacks": (12,), "allocation": "winner"},
+    "mom 6m winner": {"lookbacks": (6,), "allocation": "winner"},
+}
+
+wf = walk_forward(
+    prices,
+    PARAM_GRID,
+    objective="sharpe",      # or "cagr", "calmar", or a custom callable
+    train_min_months=60,
+    test_months=12,
+    config=BacktestConfig(),
+)
+
+print(wf.selections)       # which config won each fold
+print(summary(wf.oos_result, "walk-forward OOS"))
+```
+
 ### Metrics
 
 CAGR, annual volatility, Sharpe, Sortino, Calmar, max drawdown, longest drawdown, win rate, best/worst month, calendar-year returns, annual turnover, time in market, number of trades, total taxes and costs.
