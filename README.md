@@ -48,6 +48,30 @@ Helpers:
 
 - `constant_weights(prices, {"momentum": 1.0})` — fixed allocation, rebalanced every period
 - `periodic_weights(prices, {"momentum": 0.5, "value": 0.5}, freq="Y")` — rebalance annually; weights drift between rebalance dates
+- `momentum_weights(prices, lookbacks=(12,), allocation="winner")` — rank assets by trailing momentum (optional volatility scaling, relative weights, momentum-gap threshold, absolute/cash mode)
+
+### Momentum strategy
+
+`momentum_weights` ranks assets on trailing returns (averaged across one or more lookback windows). Defaults: 12-month lookback, winner-take-all, monthly rebalance, fully invested.
+
+```python
+from asset_allocation.strategy import momentum_weights
+
+# Classic 12-month winner-take-all
+weights = momentum_weights(prices)
+
+# MSCI-style blend with volatility scaling and a 2% momentum-gap band
+weights = momentum_weights(
+    prices,
+    lookbacks=(6, 12),
+    vol_scaled=True,
+    allocation="relative",
+    threshold=0.02,
+)
+
+# Defensive: move to cash when momentum is non-positive
+weights = momentum_weights(prices, absolute=True)
+```
 
 ### Taxes and costs (Germany defaults)
 
