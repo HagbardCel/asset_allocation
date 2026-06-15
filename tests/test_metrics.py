@@ -11,6 +11,7 @@ from asset_allocation.metrics import (
     annual_turnover_ex_liquidation,
     annual_turnover_incl_liquidation,
     calendar_year_returns,
+    summary,
 )
 
 
@@ -51,3 +52,25 @@ def test_annual_turnover_excludes_liquidation() -> None:
 
     assert incl > ex
     assert incl > 0.0
+
+
+def test_summary_handles_single_return_without_nan() -> None:
+    dates = pd.to_datetime(["2020-01-31", "2020-02-29"])
+    equity = pd.Series([100.0, 101.0], index=dates)
+    result = BacktestResult(
+        equity=equity,
+        returns=equity.pct_change().dropna(),
+        held_weights=pd.DataFrame(),
+        trade_log=pd.DataFrame(),
+        total_taxes=0.0,
+        total_costs=0.0,
+        num_trades=0,
+    )
+
+    metrics = summary(result).iloc[0]
+
+    assert metrics["annual_volatility"] == pytest.approx(0.0)
+    assert metrics["sharpe_ratio"] == pytest.approx(0.0)
+    assert metrics["sortino_ratio"] == pytest.approx(0.0)
+    assert pd.notna(metrics["annual_volatility"])
+    assert pd.notna(metrics["sharpe_ratio"])

@@ -26,7 +26,10 @@ def cagr(equity: pd.Series, periods_per_year: int = 12) -> float:
 def annual_volatility(returns: pd.Series, periods_per_year: int = 12) -> float:
     if returns.empty:
         return 0.0
-    return float(returns.std(ddof=1) * np.sqrt(periods_per_year))
+    std = returns.std(ddof=1)
+    if pd.isna(std) or std == 0:
+        return 0.0
+    return float(std * np.sqrt(periods_per_year))
 
 
 def sharpe_ratio(
@@ -34,12 +37,14 @@ def sharpe_ratio(
     risk_free_rate: float = 0.0,
     periods_per_year: int = 12,
 ) -> float:
-    vol = annual_volatility(returns, periods_per_year)
-    if vol == 0 or returns.empty:
+    if returns.empty:
+        return 0.0
+    std = returns.std(ddof=1)
+    if pd.isna(std) or std == 0:
         return 0.0
     period_rf = risk_free_rate / periods_per_year
     excess = returns.mean() - period_rf
-    return float(excess / returns.std(ddof=1) * np.sqrt(periods_per_year))
+    return float(excess / std * np.sqrt(periods_per_year))
 
 
 def sortino_ratio(
@@ -52,9 +57,12 @@ def sortino_ratio(
     period_rf = risk_free_rate / periods_per_year
     excess = returns.mean() - period_rf
     downside = returns[returns < 0]
-    if downside.empty or downside.std(ddof=1) == 0:
+    if downside.empty:
         return 0.0
-    return float(excess / downside.std(ddof=1) * np.sqrt(periods_per_year))
+    downside_std = downside.std(ddof=1)
+    if pd.isna(downside_std) or downside_std == 0:
+        return 0.0
+    return float(excess / downside_std * np.sqrt(periods_per_year))
 
 
 def max_drawdown(equity: pd.Series) -> float:

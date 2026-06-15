@@ -23,6 +23,10 @@ def clear_notebook(path: Path) -> bool:
         if cell.get("execution_count") is not None:
             cell["execution_count"] = None
             changed = True
+        metadata = cell.get("metadata", {})
+        if metadata.pop("execution", None) is not None:
+            cell["metadata"] = metadata
+            changed = True
 
     if not changed:
         return False
@@ -39,11 +43,9 @@ def main(argv: list[str]) -> int:
         print("usage: clear-notebook-outputs.py NOTEBOOK [NOTEBOOK ...]", file=sys.stderr)
         return 2
 
-    changed_any = False
     for arg in argv[1:]:
         path = Path(arg)
         if clear_notebook(path):
-            changed_any = True
             print(path)
 
     return 0

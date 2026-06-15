@@ -281,7 +281,7 @@ def _momentum_scores(
         if vol_scaled:
             monthly_returns = prices.pct_change()
             excess = monthly_returns - period_rf
-            vol = excess.rolling(vol_window).std(ddof=1) * np.sqrt(12.0)
+            vol = excess.shift(skip).rolling(vol_window).std(ddof=1) * np.sqrt(12.0)
             score = trailing_return / vol
         else:
             score = trailing_return

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from asset_allocation.strategy import momentum_weights, periodic_weights
+from asset_allocation.strategy import _momentum_scores, momentum_weights, periodic_weights
 
 
 def test_momentum_no_lookahead_by_default() -> None:
@@ -38,6 +38,48 @@ def test_momentum_no_lookahead_by_default() -> None:
     assert not defined_high_la.empty
     assert not defined_low_la.empty
     assert not defined_high_la.iloc[-1].equals(defined_low_la.iloc[-1])
+
+
+def test_vol_scaled_momentum_no_lookahead_by_default() -> None:
+    dates = pd.date_range("2019-01-31", periods=36, freq="ME")
+    n = len(dates)
+
+    prices_high_shock = pd.DataFrame(
+        {
+            "a": [100.0 * (1.01**i) for i in range(n)],
+            "b": [100.0 * (1.005**i) for i in range(n - 1)] + [300.0],
+        },
+        index=dates,
+    )
+    prices_low_shock = prices_high_shock.copy()
+    prices_low_shock.loc[dates[-1], "b"] = 50.0
+
+    kwargs = {"lookbacks": (12,), "vol_scaled": True, "vol_window": 12}
+    weights_high = momentum_weights(prices_high_shock, **kwargs)
+    weights_low = momentum_weights(prices_low_shock, **kwargs)
+
+    defined_high = weights_high.dropna(how="all")
+    defined_low = weights_low.dropna(how="all")
+    assert not defined_high.empty
+    assert not defined_low.empty
+    pd.testing.assert_series_equal(defined_high.iloc[-1], defined_low.iloc[-1])
+
+    score_kwargs = {
+        "lookbacks": (12,),
+        "vol_scaled": True,
+        "vol_window": 12,
+        "risk_free_rate": 0.0,
+    }
+    last = dates[-1]
+    scores_high_skip1 = _momentum_scores(prices_high_shock, skip=1, **score_kwargs)
+    scores_low_skip1 = _momentum_scores(prices_low_shock, skip=1, **score_kwargs)
+    pd.testing.assert_series_equal(
+        scores_high_skip1.loc[last], scores_low_skip1.loc[last]
+    )
+
+    scores_high_skip0 = _momentum_scores(prices_high_shock, skip=0, **score_kwargs)
+    scores_low_skip0 = _momentum_scores(prices_low_shock, skip=0, **score_kwargs)
+    assert not scores_high_skip0.loc[last].equals(scores_low_skip0.loc[last])
 
 
 def test_periodic_weights_invests_from_first_date() -> None:

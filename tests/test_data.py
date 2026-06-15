@@ -18,6 +18,19 @@ def test_load_valid_index_csv() -> None:
     assert series.iloc[-1] == pytest.approx(1020.0)
 
 
+def test_load_valid_index_csv_ignores_footer_and_parses_thousands() -> None:
+    series = load_index_csv(FIXTURES / "valid_index.csv", "test")
+
+    assert series.iloc[0] == pytest.approx(1000.0)
+    assert series.iloc[1] == pytest.approx(1010.0)
+    assert all(value > 0 for value in series)
+
+
+def test_load_index_csv_rejects_empty_series() -> None:
+    with pytest.raises(ValueError, match="No valid observations"):
+        load_index_csv(FIXTURES / "empty_index.csv", "test")
+
+
 def test_load_unsorted_index_csv() -> None:
     series = load_index_csv(FIXTURES / "unsorted_index.csv", "test")
     assert series.index.is_monotonic_increasing

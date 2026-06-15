@@ -114,6 +114,8 @@ print(wf.selections)       # which config won each fold
 print(summary(wf.oos_result, "walk-forward OOS"))
 ```
 
+This is **stitched candidate-signal walk-forward** (v1): each fold's OOS segment uses the winning candidate's precomputed full-history weights, not a sequentially updated portfolio state machine. For threshold-band or held-asset momentum strategies, internal state may differ from a strictly sequential implementation.
+
 ### Metrics
 
 CAGR, annual volatility, Sharpe, Sortino, Calmar, max drawdown, longest drawdown, win rate, best/worst month, calendar-year returns, annual turnover (ex- and incl. liquidation), time in market, number of trades, total taxes and costs.

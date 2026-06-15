@@ -52,6 +52,9 @@ def load_index_csv(path: str | Path, name: str) -> pd.Series:
 
 
 def _validate_monthly_series(series: pd.Series, path: Path) -> None:
+    if series.empty:
+        raise ValueError(f"No valid observations in {path}")
+
     if not series.index.is_unique:
         raise ValueError(f"Duplicate dates in {path}")
 
