@@ -47,7 +47,22 @@ def load_index_csv(path: str | Path, name: str) -> pd.Series:
     series = series.dropna()
     series.index = pd.DatetimeIndex(series.index)
     series = series.sort_index()
+    _validate_monthly_series(series, path)
     return series
+
+
+def _validate_monthly_series(series: pd.Series, path: Path) -> None:
+    if not series.index.is_unique:
+        raise ValueError(f"Duplicate dates in {path}")
+
+    if (series <= 0).any():
+        raise ValueError(f"Non-positive index level in {path}")
+
+    periods = series.index.to_period("M")
+    expected = pd.period_range(periods.min(), periods.max(), freq="M")
+    missing = expected.difference(periods)
+    if len(missing):
+        raise ValueError(f"Missing monthly observations in {path}: {missing.tolist()}")
 
 
 def load_prices(

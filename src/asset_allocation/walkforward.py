@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pandas as pd
@@ -51,12 +51,17 @@ def walk_forward(
     test_months: int = 12,
     config: BacktestConfig | None = None,
     strategy_fn: StrategyFn = momentum_weights,
+    liquidate_training_folds: bool = False,
 ) -> WalkForwardResult:
     """Run anchored walk-forward parameter selection and stitch OOS segments.
 
     At each fold an expanding training window is used to pick the best
     parameter set by ``objective``. The selected config's weight rows in the
     subsequent test window are stitched into one continuous OOS backtest.
+
+    Training folds use ``liquidate_training_folds`` to control whether
+    ``liquidate_at_end`` applies during in-sample scoring. The stitched OOS
+    backtest always uses the caller's ``config`` unchanged.
 
   Note: path-dependent momentum state (threshold band, held asset) is reset
     when each candidate's weights are computed over full history; acceptable
@@ -102,6 +107,12 @@ def walk_forward(
                 score_fn,
                 config,
                 strategy_fn,
+                liquidate_training_folds,
+            )
+
+        if all(score == _NEGATIVE_INF for score in train_scores.values()):
+            raise ValueError(
+                f"All parameter candidates failed for fold ending {train_end.date()}."
             )
 
         selected_name = max(train_scores, key=train_scores.get)  # type: ignore[arg-type]
@@ -189,13 +200,15 @@ def _score_on_train(
     score_fn: ObjectiveFn,
     config: BacktestConfig,
     strategy_fn: StrategyFn,
+    liquidate_training_folds: bool,
 ) -> float:
     try:
         train_weights = strategy_fn(train_prices, **params)
         defined = train_weights.dropna(how="all")
         if defined.empty:
             return _NEGATIVE_INF
-        result = run_backtest(train_prices, train_weights, config)
+        train_config = replace(config, liquidate_at_end=liquidate_training_folds)
+        result = run_backtest(train_prices, train_weights, train_config)
         if result.returns.empty:
             return _NEGATIVE_INF
         return score_fn(result)

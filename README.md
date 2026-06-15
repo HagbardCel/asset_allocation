@@ -1,6 +1,6 @@
 # Asset Allocation Strategy Backtester
 
-Evaluate dynamic asset allocation strategies on historical MSCI index data. Strategies are expressed as a table of target weights per asset per date; the toolkit handles backtesting, German taxes and transaction costs, performance metrics, and analysis plots.
+Evaluate dynamic asset allocation strategies on historical MSCI index data. Strategies are expressed as a table of target weights per asset per date; the toolkit handles backtesting, a simplified German tax model, transaction costs, performance metrics, and analysis plots.
 
 ## Data
 
@@ -37,7 +37,7 @@ prices = load_prices()
 weights = constant_weights(prices, {"momentum": 1.0})
 result = run_backtest(prices, weights)
 print(summary(result))
-plot_summary(result, prices)
+plot_summary({"momentum": result})
 ```
 
 ### Strategy format
@@ -49,6 +49,8 @@ Helpers:
 - `constant_weights(prices, {"momentum": 1.0})` — fixed allocation, rebalanced every period
 - `periodic_weights(prices, {"momentum": 0.5, "value": 0.5}, freq="Y")` — rebalance annually; weights drift between rebalance dates
 - `momentum_weights(prices, lookbacks=(12,), allocation="winner")` — rank assets by trailing momentum (optional volatility scaling, relative weights, momentum-gap threshold, absolute/cash mode)
+
+After transaction costs and taxes, held weights may deviate slightly from targets because buys are scaled to available cash.
 
 ### Momentum strategy
 
@@ -74,6 +76,8 @@ weights = momentum_weights(prices, absolute=True)
 ```
 
 ### Taxes and costs (Germany defaults)
+
+The default tax model is a simplified German equity ETF approximation: realized positive gains are taxed using Abgeltungsteuer + Soli after 30% Teilfreistellung. It does not model Vorabpauschale, distributions, loss carry-forward, or full tax-lot accounting.
 
 `BacktestConfig` defaults:
 
@@ -112,4 +116,4 @@ print(summary(wf.oos_result, "walk-forward OOS"))
 
 ### Metrics
 
-CAGR, annual volatility, Sharpe, Sortino, Calmar, max drawdown, longest drawdown, win rate, best/worst month, calendar-year returns, annual turnover, time in market, number of trades, total taxes and costs.
+CAGR, annual volatility, Sharpe, Sortino, Calmar, max drawdown, longest drawdown, win rate, best/worst month, calendar-year returns, annual turnover (ex- and incl. liquidation), time in market, number of trades, total taxes and costs.

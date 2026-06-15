@@ -111,17 +111,39 @@ def calendar_year_returns(result: BacktestResult) -> pd.Series:
     return returns
 
 
-def annual_turnover(result: BacktestResult) -> float:
-    """Average annual traded notional divided by average portfolio value."""
-    if result.trade_log.empty or result.equity.empty:
+def _turnover_from_trades(result: BacktestResult, trades: pd.DataFrame) -> float:
+    if trades.empty or result.equity.empty:
         return 0.0
 
-    trade_values = result.trade_log["value"].abs()
+    trade_values = trades["value"].abs()
     years = max((len(result.equity) - 1) / result.config.periods_per_year, 1e-9)
     avg_equity = float(result.equity.mean())
     if avg_equity == 0:
         return 0.0
     return float(trade_values.sum() / years / avg_equity)
+
+
+def annual_turnover_incl_liquidation(result: BacktestResult) -> float:
+    """Average annual traded notional divided by average portfolio value."""
+    if result.trade_log.empty:
+        return 0.0
+    return _turnover_from_trades(result, result.trade_log)
+
+
+def annual_turnover_ex_liquidation(result: BacktestResult) -> float:
+    """Annual turnover excluding terminal liquidation trades."""
+    if result.trade_log.empty:
+        return 0.0
+
+    trades = result.trade_log
+    if "liquidation" in trades.columns:
+        trades = trades[~trades["liquidation"].fillna(False)]
+    return _turnover_from_trades(result, trades)
+
+
+def annual_turnover(result: BacktestResult) -> float:
+    """Average annual traded notional excluding liquidation trades."""
+    return annual_turnover_ex_liquidation(result)
 
 
 def time_in_market(result: BacktestResult) -> float:
@@ -152,6 +174,7 @@ def summary(result: BacktestResult, name: str = "strategy") -> pd.DataFrame:
         "worst_month": worst_month(result.returns),
         "win_rate": win_rate(result.returns),
         "annual_turnover": annual_turnover(result),
+        "annual_turnover_incl_liquidation": annual_turnover_incl_liquidation(result),
         "time_in_market": time_in_market(result),
         "num_trades": result.num_trades,
         "total_taxes": result.total_taxes,

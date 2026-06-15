@@ -59,6 +59,8 @@ def periodic_weights(
     rebalance_dates = prices.groupby(periods, observed=False).tail(1).index
     if len(rebalance_dates) == 0:
         rebalance_dates = prices.index[[0]]
+    else:
+        rebalance_dates = rebalance_dates.union(prices.index[[0]]).sort_values()
 
     full_weights = {asset: weights_dict.get(asset, 0.0) for asset in prices.columns}
     data = {asset: [weight] * len(rebalance_dates) for asset, weight in full_weights.items()}
@@ -99,9 +101,10 @@ def momentum_weights(
         ``"winner"`` allocates 100% to the top-scoring asset;
         ``"relative"`` allocates in proportion to positive scores.
     threshold
-        Momentum-gap band: only switch when the desired top asset's score
+        In ``"winner"`` mode, only switch when the desired top asset's score
         exceeds the currently held asset's score by more than this amount.
-        In ``"relative"`` mode the same gap test applies before rebalancing.
+        In ``"relative"`` mode, rebalance when the L1 distance between desired
+        and current target weights exceeds this threshold.
     absolute
         If True, move to cash when the relevant momentum score(s) are <= 0.
     skip
@@ -130,6 +133,11 @@ def momentum_weights(
     if vol_scaled:
         warmup = max(warmup, vol_window)
 
+    if warmup >= len(prices):
+        raise ValueError(
+            f"Not enough price history: need more than {warmup} rows, got {len(prices)}."
+        )
+
     rebalance_dates = _rebalance_dates(prices, rebalance)
     rebalance_dates = rebalance_dates[rebalance_dates >= prices.index[warmup]]
 
@@ -138,6 +146,7 @@ def momentum_weights(
     row_dates: list[pd.Timestamp] = []
 
     held_asset: str | None = None
+    current_target: pd.Series | None = None
 
     for date in rebalance_dates:
         row_scores = scores.loc[date]
@@ -147,9 +156,10 @@ def momentum_weights(
         desired = _weights_from_scores(row_scores, allocation, absolute)
         desired_top = _top_asset(desired)
 
-        if held_asset is None:
+        if current_target is None:
             weight_rows.append(desired.to_dict())
             row_dates.append(date)
+            current_target = desired
             held_asset = desired_top
             continue
 
@@ -157,7 +167,17 @@ def momentum_weights(
             if held_asset is not None:
                 weight_rows.append(desired.to_dict())
                 row_dates.append(date)
+                current_target = desired
                 held_asset = None
+            continue
+
+        if allocation == "relative":
+            weight_distance = float((desired - current_target).abs().sum())
+            if weight_distance > threshold:
+                weight_rows.append(desired.to_dict())
+                row_dates.append(date)
+                current_target = desired
+                held_asset = desired_top
             continue
 
         if desired_top == held_asset:
@@ -167,6 +187,7 @@ def momentum_weights(
         if gap > threshold:
             weight_rows.append(desired.to_dict())
             row_dates.append(date)
+            current_target = desired
             held_asset = desired_top
 
     weights = pd.DataFrame(weight_rows, index=row_dates, columns=assets)
