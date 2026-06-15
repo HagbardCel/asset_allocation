@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Clear Jupyter notebook outputs before pushing to remote.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+notebooks="$(git ls-files '*.ipynb' || true)"
+if [ -z "$notebooks" ]; then
+  exit 0
+fi
+
+args=()
+while IFS= read -r notebook; do
+  [ -n "$notebook" ] || continue
+  args+=("$notebook")
+done <<< "$notebooks"
+
+uv run python scripts/clear_notebook_outputs.py "${args[@]}" >/dev/null || true
+
+modified="$(git diff --name-only -- '*.ipynb' || true)"
+if [ -n "$modified" ]; then
+  while IFS= read -r notebook; do
+    [ -n "$notebook" ] || continue
+    git add "$notebook"
+  done <<< "$modified"
+
+  echo "pre-push: cleared notebook outputs and staged changes:" >&2
+  while IFS= read -r notebook; do
+    [ -n "$notebook" ] || continue
+    printf '  %s\n' "$notebook" >&2
+  done <<< "$modified"
+  echo "pre-push: commit the cleaned notebooks, then push again." >&2
+  exit 1
+fi
+
+exit 0
